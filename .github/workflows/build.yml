@@ -1,0 +1,44 @@
+name: Build AetherPurpleSX2 Android
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+        
+      - name: Install NDK R23c
+        run: |
+          sdkmanager --install "ndk;23.1.7779620"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/23.1.7779620" >> $GITHUB_ENV
+          
+      - name: Download Shell APK
+        run: |
+          
+          curl -L "${{ secrets.SHELL_APK_URL }}" -o app/shell.apk
+          
+      - name: Build with Gradle
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
+          
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: AetherPurpleSX2-Build
+          path: app/build/outputs/apk/release/*.apk
