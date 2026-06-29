@@ -1,4 +1,4 @@
-name: Build AetherPurpleSX2 Android
+name: Build AetherPurpleSX2 (CMake Repack)
 
 on:
   push:
@@ -13,45 +13,59 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         
-      - name: Setup Java JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          
-      - name: Setup Android SDK
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc g++ cmake make ninja-build git zip zipalign apksigner openjdk-17-jdk
+      
+      - name: Setup Android SDK & NDK
         uses: android-actions/setup-android@v3
         
       - name: Install NDK R23c
         run: |
           sdkmanager --install "ndk;23.1.7779620"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/23.1.7779620" >> $GITHUB_ENV
+          echo "NDK_PATH=$ANDROID_SDK_ROOT/ndk/23.1.7779620" >> $GITHUB_ENV
+      
       - name: Download Shell APK
         run: |
-          
-          mkdir -p app/
-          
-          
-          curl -fL "https://github.com/AetherSX2-backup/AetherSX2-builds/raw/master/alpha-2928-3060/13322-v1.4-3060.apk" -o app/shell.apk || \
-          
-          
-          curl -fL "https://archive.org/download/AetherSX2-Collection/alpha-2928-3060/13322-v1.4-3060.apk" -o app/shell.apk || \
-          
-          
-          exit 1
-          
-          
-          ls -lh app/shell.apk
-
-      - name: Build with Gradle
+          mkdir -p build-android/apk
+          curl -fL "https://github.com/AetherSX2-backup/AetherSX2-builds/raw/master/alpha-2928-3060/13322-v1.4-3060.apk" -o build-android/apk/purplesx2.apk || \
+          curl -fL "https://archive.org/download/AetherSX2-Collection/alpha-2928-3060/13322-v1.4-3060.apk" -o build-android/apk/purplesx2.apk
+      
+      - name: Configure CMake
         run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease
+          mkdir -p build-android && cd build-android
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=$NDK_PATH/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-21
+      
+      - name: Build libemucore.so
+        run: |
+          cd build-android
+          make -j$(nproc)
+      
+      - name: Repack APK
+        run: |
+          cd build-android/apk
+          mkdir -p lib/arm64-v8a
+          cp ../pcsx2/libemucore.so lib/arm64-v8a/
+          zip -0 purplesx2.apk lib/arm64-v8a/libemucore.so
+      
+      - name: Align & Sign APK
+        run: |
+          cd build-android/apk
+          zipalign -p 4 purplesx2.apk purplesx2-aligned.apk
           
-      - name: Upload APK Artifact
+          # Generate debug keystore untuk signing
+          keytool -genkey -v -keystore debug.keystore -alias debugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Debug, OU=Dev, O=Local, L=City, S=State, C=ID"
+          
+          apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out AetherPurpleSX2-signed.apk purplesx2-aligned.apk
+      
+      - name: Upload Final APK
         uses: actions/upload-artifact@v4
         with:
-          name: AetherPurpleSX2-Build
-          path: app/build/outputs/apk/release/
-          compression-level: 0
-          retention-days: 5
+          name: AetherPurpleSX2-Final
+          path: build-android/apk/AetherPurpleSX2-signed.apk
+          retention-days: 7
