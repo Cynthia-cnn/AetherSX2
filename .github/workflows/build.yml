@@ -30,7 +30,7 @@ jobs:
       - name: Download Shell APK
         run: |
           
-          curl -L "${{ secrets.SHELL_APK_URL }}" -o app/shell.apk
+          curl -L "${{ https://github.com/AetherSX2-backup/AetherSX2-builds/raw/8a6d4b29e2481b53139b6b915142497ec33ebaba/alpha-2928-3060/13215-v1.4-2953.apk }}" -o app/shell.apk
           
       - name: Build with Gradle
         run: |
