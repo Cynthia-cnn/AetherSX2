@@ -16,15 +16,24 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gcc g++ cmake make ninja-build git zip zipalign apksigner openjdk-17-jdk
+          sudo apt-get install -y build-essential gcc g++ cmake make ninja-build git zip openjdk-17-jdk
       
-      - name: Setup Android SDK & NDK
-        uses: android-actions/setup-android@v3
-        
-      - name: Install NDK R23c
+      # HAPUS STEP "Setup Android SDK & NDK" YANG LAMA
+      # GANTI DENGAN INI:
+      - name: Setup Android Environment Manually
         run: |
-          sdkmanager --install "ndk;23.1.7779620"
-          echo "NDK_PATH=$ANDROID_SDK_ROOT/ndk/23.1.7779620" >> $GITHUB_ENV
+          # Gunakan SDK yang sudah ada di runner
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          
+          # Install NDK R23c secara manual via sdkmanager yang sudah ada
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --install "ndk;23.1.7779620" --sdk_root=/usr/local/lib/android/sdk
+          
+          # Set variabel NDK
+          echo "NDK_PATH=/usr/local/lib/android/sdk/ndk/23.1.7779620" >> $GITHUB_ENV
+          
+          # Tambahkan build-tools ke PATH (untuk zipalign & apksigner)
+          echo "/usr/local/lib/android/sdk/build-tools/34.0.0" >> $GITHUB_PATH
       
       - name: Download Shell APK
         run: |
@@ -50,7 +59,11 @@ jobs:
         run: |
           cd build-android/apk
           mkdir -p lib/arm64-v8a
-          cp ../pcsx2/libemucore.so lib/arm64-v8a/
+          # CATATAN: Sesuaikan path libemucore.so jika berbeda
+          cp ../pcsx2/libemucore.so lib/arm64-v8a/ 2>/dev/null || \
+          cp ../libemucore.so lib/arm64-v8a/ || \
+          find .. -name "libemucore.so" -exec cp {} lib/arm64-v8a/ \;
+          
           zip -0 purplesx2.apk lib/arm64-v8a/libemucore.so
       
       - name: Align & Sign APK
@@ -58,7 +71,6 @@ jobs:
           cd build-android/apk
           zipalign -p 4 purplesx2.apk purplesx2-aligned.apk
           
-          # Generate debug keystore untuk signing
           keytool -genkey -v -keystore debug.keystore -alias debugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Debug, OU=Dev, O=Local, L=City, S=State, C=ID"
           
           apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out AetherPurpleSX2-signed.apk purplesx2-aligned.apk
